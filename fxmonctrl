@@ -1,0 +1,67 @@
+#!/bin/bash
+ME=$(basename "$0")
+MY_DIR="$(cd "`dirname $0`" 2> /dev/null && pwd)"
+ROOT="$MY_DIR/.."
+LOGS="/var/app/fxutil/fxmon/logs"
+FXMON=$MY_DIR/fxmon
+PIDFILE=$LOGS/fxmon.pid
+
+if [[ "$USER" != "fxsg" ]]
+then
+    echo "ERROR: You have to be fxsg user"
+    exit 1
+fi
+
+case "$1" in
+  start)
+    if [[ -s "$PIDFILE" ]]
+    then
+        if ps -p $(< $PIDFILE) > /dev/null 2>&1
+        then
+            echo "ERROR: fxmon is already running"
+        else
+            rm -f $PIDFILE
+        fi
+    fi
+
+    nohup $FXMON > /dev/null 2>&1 &
+    echo $! > $PIDFILE
+    ;;
+
+  stop)
+    if [[ -s "$PIDFILE" ]]
+    then
+        PID=$(< $PIDFILE)
+        if ps -p $PID > /dev/null 2>&1
+        then
+            kill $PID
+        fi
+        sleep 2
+        if ps -p $PID > /dev/null 2>&1
+        then
+            kill -9 $PID
+        fi
+
+        rm -f $PIDFILE
+    fi
+    ;;
+
+  status)
+    if [[ -s "$PIDFILE" ]]
+    then
+        PID=$(< $PIDFILE)
+        if ps -p $PID > /dev/null 2>&1
+        then
+            echo "INFO: fxmon is UP PID=$PID"
+            exit 0
+        fi
+    fi
+
+    echo "INFO: fxmon is DOWN"
+    exit 1
+    ;;
+
+  *)
+    echo "Usage: fxmonctrl start|stop|status"
+    ;;
+esac
