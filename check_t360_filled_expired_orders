@@ -1,0 +1,59 @@
+#!/bin/bash
+
+T360_DIR='/var/app/fxsg/orders/t360/logs'
+LOG=/var/app/fxutil/fxmon/logs/error.log
+INFOLOG=/var/app/fxutil/fxmon/logs/fxmon.log
+
+D1=`date --date="-5 mins" +'%Y-%m-%d %H:%M:%S'`
+D2=`date +'%Y-%m-%d %H:%M:%S'`
+DATE=`date`
+
+fill_exp_cmd() { grep "orderStatus\=FILLED" | awk -F","  '{ split($4,a,"="); split($6,b,"="); split($7,c,"="); split($8,d,"="); split($12,e,                                "="); split($13,f,"="); split($14,g,"="); split($28,h,"="); split($24,i,"="); split($44,j,"="); split($57,k,"="); print a[2]","b[2]","c[2]",                                "d[2]","e[2]","f[2]","g[2]","h[2]","i[2]","j[2]","k[2] }' |grep -v null|awk -F, '$9 > $10';}
+
+echo "$DATE : INFO [check_t360_filled_expired_orders] Checking T360 Filled Expired Orders logs" >> ${INFOLOG}
+
+#360T ORDERS
+cd ${T360_DIR}
+awk -v D1="$D1" -v D2="$D2" '$0 > D1 && $0 < D2 || $0 ~ D2' $T360_DIR/service.log | fill_exp_cmd  > /var/tmp/T360_TMP
+
+if [ -s /var/tmp/T360_TMP ]
+then
+        echo -e "\nFound a new T360 trade filled after order expiry time.  Check performed between $D1 and $D2" > /var/tmp/T360_TMP.txt
+        echo -e "\nPlease verify trade" >> /var/tmp/T360_TMP.txt
+        awk -F, '{print "\nZKB_ORDER_ID \t=\t" "https://fxtrading.prod.zkb.ch:9400/inspect?id="$1 "\n360T_ORDER_ID \t=\t"$2 "\nClient Userna                                me \t=\t"$6 "\nClient PartnerID \t=\t"$11 "\nCURRENCY PAIR \t=\t" $3 $4 "\nQUANTITY \t\t=\t" $5  "\nTRIGGER RATE \t\t=\t" $8" \nZKB_ORDER_ST                                ATUS \t=\t" $7 "\nZKB_EXECUTION_TIME \t=\t" strftime("%c",substr($9,0,10)) "\nORDER_EXPIRE_TIME \t=\t" strftime("%c",substr($10,0,10)) }' /v                                ar/tmp/T360_TMP >> /var/tmp/T360_TMP.txt
+        awk -v DATE="$DATE" '{print DATE" ERROR : Found a new T360 trade filled after order expiry time. ORDER_ID = " $1 }' /var/tmp/T360_TM                                P >> $LOG
+
+        mailx -s "CRITICAL: Found new T360 trade filled after order expiry" fxsupport@zkb.ch < /var/tmp/T360_TMP.txt
+        rm /var/tmp/T360_TMP /var/tmp/T360_TMP.txt
+fi
+
+rm /var/tmp/T360_TMP /var/tmp/T360_TMP.txt > /dev/null 2>&1
+[fxsg@lnx2691 min5]$ cat check_rvlimit
+#!/bin/bash
+
+LOG=/var/app/fxutil/fxmon/logs/error.log
+INFOLOG=/var/app/fxutil/fxmon/logs/fxmon.log
+RISKDIR=/var/app/fxsg/oms/data/rvlimitservice/archive
+
+THRESHOLD=100000
+
+DIR=`ls -rt /var/app/fxsg/oms/data/rvlimitservice/archive | tail -2 | head -1`
+RV_PARNTER_SIZE=`stat ${RISKDIR}/${DIR}/structure.txt|grep Size|awk '{print $2}'`
+FILE_TIME=`ls -rt /var/app/fxsg/oms/data/rvlimitservice/archive | tail -2  | head -1 |cut -d "-" -f 2`
+CURRENT_TIME=`date +"%H%M"`
+
+# Check that last file is current
+#if [ "$FILE_TIME" -gt $(expr $CURRENT_TIME \- 15) ]
+#then
+        # Check last file size is within normal tolerance
+        if [ ${RV_PARNTER_SIZE} -lt ${THRESHOLD} ]
+        then
+                echo "`date` ERROR : Risk Partner File appears too small or corrupt. (${DIR})"  >> $LOG
+                echo "`date` ERROR : Size of Partnter structure.txt appears too small. Size = ${RV_PARNTER_SIZE} in ${DIR}" >> ${INFOLOG}
+        else
+                echo "`date` INFO : Size of Partnter structure.txt appears normal. Size = ${RV_PARNTER_SIZE} in ${DIR}" >> ${INFOLOG}
+        fi
+#else
+#        echo "`date` ERROR : Risk Partner File is not current. (${DIR})" >> $LOG
+#        echo "`date` ERROR : Risk Partner File is not current. (${DIR})" >> ${INFOLOG}
+#fi
