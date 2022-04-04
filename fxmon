@@ -1,0 +1,47 @@
+#!/bin/bash
+trap "" SIGHUP
+ME=$(basename "$0")
+MY_DIR="$(cd "`dirname $0`" 2> /dev/null && pwd)"
+ROOT="$MY_DIR/.."
+LOGS="/var/app/fxutil/fxmon/logs"
+
+HOUR=06
+DAY=5
+
+sleep 1
+
+if [[ "$PPID" != "1" ]]
+then
+        echo "ERROR: please use fxmonctrl to start fxmon"
+        exit 1
+fi
+
+RUN_PARTS="$ROOT/bin/run-parts"
+MIN5="$ROOT/min5"
+HOURLY="$ROOT/hourly"
+DAYLY="$ROOT/daily"
+WEEKLY="$ROOT/weekly"
+
+mkdir -p $LOGS $MIN5 $HOURLY $DAYLY $WEEKLY
+
+while true
+do
+ $RUN_PARTS $MIN5 >> $LOGS/fxmon.log 2>&1 &
+ if [ "$h" != "$lh" ]
+ then
+  $RUN_PARTS $HOURLY >> $LOGS/fxmon.log 2>&1 &
+  lh=$(date "+%H")
+ fi
+ if [ "$d" != "$ld" -a "$h" = "$HOUR" ]
+ then
+   $RUN_PARTS $DAYLY >> $LOGS/fxmon.log 2>&1 &
+   ld=$(date "+%u")
+ fi
+ if [ "$w" != "$lw" -a "$d" = "$DAY" -a "$h" = "$HOUR" ]
+ then
+  $RUN_PARTS $WEEKLY >> $LOGS/fxmon.log 2>&1 &
+  lw=$(date "+%W")
+ fi
+ sleep 300
+ read w d h m <<< $(date "+%W %u %H %M")
+done
